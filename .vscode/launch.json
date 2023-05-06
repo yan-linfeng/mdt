@@ -1,0 +1,32 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "App",
+            "request": "launch",
+            "mainClass": "lf.mdt.App",
+            "projectName": "mdt"
+        },
+        {
+            "type": "java",
+            "name": "Current File",
+            "request": "launch",
+            "mainClass": "${file}",
+            "args": [
+                "-mdfolder",
+                "/Users/yanlinfeng/Documents/GitHub/apex/movies-lab/"
+            ]
+        },
+        {
+            "type": "java",
+            "name": "MarkdownTranslator",
+            "request": "launch",
+            "mainClass": "translator.markdown.MarkdownTranslator",
+            "projectName": "mdt"
+        }
+    ]
+}
