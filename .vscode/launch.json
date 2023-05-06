@@ -18,7 +18,7 @@
             "mainClass": "${file}",
             "args": [
                 "-mdfolder",
-                "/Users/yanlinfeng/Documents/GitHub/apex/movies-lab/"
+                "/Users/yanlinfeng/Documents/GitHub/apex/movies-lab/1-create-app/"
             ]
         },
         {

@@ -10,7 +10,6 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -21,12 +20,6 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.openqa.selenium.By;
-import org.openqa.selenium.JavascriptExecutor;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
-import org.openqa.selenium.edge.EdgeDriver;
-import org.openqa.selenium.support.ui.WebDriverWait;
 
 import com.google.common.base.Charsets;
 import com.vladsch.flexmark.formatter.Formatter;
@@ -37,15 +30,14 @@ import com.vladsch.flexmark.util.ast.Document;
 import com.vladsch.flexmark.util.ast.Node;
 import com.vladsch.flexmark.util.data.MutableDataSet;
 
-import io.github.bonigarcia.wdm.WebDriverManager;
-
 public class App {
-    private static WebDriver driver;
+    private static Translator translator;
 
-    private static String sourceLanguage = "en";
     private static String targetLanguage = "ja";
     private static String mdFile;
     private static String mdFolder;
+    private static String browser;
+    private static String translatorType;
 
     public static void main(String[] args) throws IOException {
         // Parse command line arguments
@@ -57,11 +49,13 @@ public class App {
                 System.out.println("mdfile not valid");
                 System.exit(0);
             }else{
-                initializeWebDriver();
+                translator = Translator.createTranslator(browser, translatorType);
+
                 String translatedMD = translateMDFile(mdFile);
                 String translatedFileName = mdFile.substring(mdFile.lastIndexOf("/")+1).replaceFirst("\\.", "_"+targetLanguage+".");
                 Files.write(Paths.get(translatedFileName), translatedMD.getBytes(Charsets.UTF_8), StandardOpenOption.CREATE_NEW);
-                driver.close();
+                
+                translator.close();
             }
         }
 
@@ -82,7 +76,9 @@ public class App {
 
                 final Path source = Paths.get(srcFolder);
                 final Path target = Paths.get(destFolder);
-                initializeWebDriver();
+                
+                translator = Translator.createTranslator(browser, translatorType);
+
                 Files.walkFileTree(source, EnumSet.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE,
                     new SimpleFileVisitor<Path>() {
                         @Override
@@ -102,14 +98,14 @@ public class App {
                                 Path translatedMDPath = target.resolve(source.relativize(file));
     
                                 String translated = translateMDFile(file.toFile().getAbsolutePath());
-                                Files.write(translatedMDPath, translated.getBytes(Charsets.UTF_8), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+                                Files.write(translatedMDPath, translated.getBytes(Charsets.UTF_8), StandardOpenOption.CREATE_NEW,StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
                             }else{
                                 Files.copy(file, target.resolve(source.relativize(file)));
                             }
                             return FileVisitResult.CONTINUE;
                         }
                     });
-                driver.close();
+                translator.close();
             }
         }
 
@@ -117,8 +113,9 @@ public class App {
 
     private static void parseCommandLine(String[] args) {
         Options options = new Options();
-        options.addOption("srclang", "source-language", true, "set source language");
-        options.addOption("tlang", "target-language", true, "set target language");
+        options.addOption("lang", "language", true, "set target language");
+        options.addOption("browser", "browser", true, "set browser to to access translator site");
+        options.addOption("translator", "translator", true, "set translator type");
         options.addOption("mdfile", "md-file", true, "markdown file to be translated");
         options.addOption("mdfolder", "md-folder", true, "markdown file folder to be translated");
 
@@ -126,11 +123,14 @@ public class App {
         HelpFormatter helper = new HelpFormatter();
         try {
             CommandLine cmd = parser.parse(options, args);
-            if(cmd.hasOption("srclang")){
-                sourceLanguage = cmd.getOptionValue("srclang");
+            if(cmd.hasOption("lang")){
+                targetLanguage = cmd.getOptionValue("lang");
             }
-            if(cmd.hasOption("tlang")){
-                targetLanguage = cmd.getOptionValue("tlang");
+            if(cmd.hasOption("browser")){
+                browser = cmd.getOptionValue("browser");
+            }
+            if(cmd.hasOption("translator")){
+                translatorType = cmd.getOptionValue("translator");
             }
             if(cmd.hasOption("mdfile")){
                 mdFile = cmd.getOptionValue("mdfile");
@@ -149,18 +149,6 @@ public class App {
             System.exit(0);
         }
     }
-
-
-    private static void initializeWebDriver() {
-        WebDriverManager.edgedriver().setup();
-        driver = new EdgeDriver();
-        driver.get("https://translate.google.com");
-
-        JavascriptExecutor jsExecutor = (JavascriptExecutor) driver;
-        jsExecutor.executeScript("document.querySelectorAll(\"div[data-language-code='"+targetLanguage+"']\")[1].click()");
-        jsExecutor.executeScript("document.querySelectorAll(\"div[data-language-code='"+sourceLanguage+"']\")[0].click()");
-    }
-
 
     private static String translateMDFile(String filePath) {
         MutableDataSet OPTIONS = new MutableDataSet()
@@ -193,7 +181,7 @@ public class App {
         // 4. Have the strings translated by your translation service of preference
         ArrayList<CharSequence> translatedTexts = new ArrayList<>(translatingTexts.size());
         for (CharSequence text : translatingTexts) {
-            CharSequence translated = translate(text);
+            CharSequence translated = translator.translate(text);
             translatedTexts.add(translated);
         }
 
@@ -214,21 +202,4 @@ public class App {
 
         return translated;
     }
-
-    private static CharSequence translate(CharSequence source) {
-        WebElement sourceElement = driver.findElement(By.cssSelector("textarea[aria-label='Source text']"));
-        sourceElement.clear();
-        sourceElement.sendKeys(source);
-
-        try {
-			Thread.sleep(3000);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-
-        WebElement translatedElement = new WebDriverWait(driver, Duration.ofSeconds(10),Duration.ofSeconds(2))
-                .until(driver -> driver.findElement(By.cssSelector("div[aria-live='polite']>div>div>span>span>span")));
-        return translatedElement.getText();
-    }
-
 }
